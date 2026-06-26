@@ -1193,6 +1193,16 @@ function AcquisitionPage() {
                   />
                 </ComposedChart>
               </ResponsiveContainer>
+              <div className="chart-explainer">
+                <span>
+                  <strong>First-time buyer volume</strong> is the monthly USD volume from wallets whose first recorded
+                  bond purchase happened in that month.
+                </span>
+                <span>
+                  <strong>First-time volume share</strong> is that new-buyer volume divided by total bond buyer volume
+                  for the month.
+                </span>
+              </div>
             </div>
           )}
         </div>

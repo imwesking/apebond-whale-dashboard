@@ -791,6 +791,24 @@ tbody tr:hover {
   padding: 6px 10px 12px 2px;
 }
 
+.chart-explainer {
+  display: grid;
+  gap: 6px;
+  margin: 0 14px 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7faf7;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.chart-explainer strong {
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .acquisition-notes {
   display: grid;
   gap: 16px;
