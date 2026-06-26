@@ -1,4 +1,5 @@
 import type {
+  AcquisitionMonthDetailResponse,
   AcquisitionResponse,
   BondDetailResponse,
   PartnerDetailResponse,
@@ -58,6 +59,10 @@ export function fetchWhales(params: WhaleParams): Promise<WhaleResponse> {
 
 export function fetchMonthlyAcquisition(): Promise<AcquisitionResponse> {
   return readJson<AcquisitionResponse>("/api/acquisition/monthly");
+}
+
+export function fetchMonthlyAcquisitionDetail(month: string): Promise<AcquisitionMonthDetailResponse> {
+  return readJson<AcquisitionMonthDetailResponse>(`/api/acquisition/monthly/${encodeURIComponent(month)}`);
 }
 
 export function fetchWallet(address: string): Promise<WalletDetail> {

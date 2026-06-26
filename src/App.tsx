@@ -1,6 +1,7 @@
 import {
   ArrowDownUp,
   BadgeDollarSign,
+  ChevronDown,
   Boxes,
   ChevronLeft,
   ChevronRight,
@@ -13,7 +14,7 @@ import {
   TrendingUp,
   WalletCards
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -27,12 +28,22 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { fetchBond, fetchMonthlyAcquisition, fetchPartner, fetchPartners, fetchWallet, fetchWhales } from "./api";
+import {
+  fetchBond,
+  fetchMonthlyAcquisition,
+  fetchMonthlyAcquisitionDetail,
+  fetchPartner,
+  fetchPartners,
+  fetchWallet,
+  fetchWhales
+} from "./api";
 import { formatDate, formatNumber, formatUsd, percent, shortenAddress } from "./format";
 import type {
+  AcquisitionMonthDetailReadyResponse,
   AcquisitionMonthRow,
   AcquisitionReadyResponse,
   AcquisitionResponse,
+  AcquisitionWalletRow,
   BondDetailResponse,
   DashboardSummary,
   PartnerDetailResponse,
@@ -339,6 +350,10 @@ function formatMonth(timestamp: number | null | undefined, long = false): string
     month: long ? "long" : "short",
     year: long ? "numeric" : "2-digit"
   }).format(new Date(timestamp * 1000));
+}
+
+function buyerTypeLabel(type: AcquisitionWalletRow["buyerType"]): string {
+  return type === "first_time" ? "New" : "Repeat";
 }
 
 function KpiStrip({ summary }: { summary: DashboardSummary | null }) {
@@ -828,11 +843,146 @@ function AcquisitionTooltip({
   );
 }
 
+function AcquisitionMonthDetailPanel({
+  detail,
+  expandedWallets,
+  onToggleWallet
+}: {
+  detail: AcquisitionMonthDetailReadyResponse;
+  expandedWallets: Record<string, boolean>;
+  onToggleWallet: (month: string, wallet: string) => void;
+}) {
+  if (detail.wallets.length === 0) {
+    return (
+      <div className="drilldown-empty">
+        <Search size={18} />
+        <span>No wallets bought bonds in this month</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="month-drilldown">
+      <div className="drilldown-summary">
+        <span>{formatNumber(detail.totalWallets)} wallets</span>
+        <span>{formatNumber(detail.summary.totalBuys)} buys</span>
+        <span>{formatUsd(detail.summary.totalVolumeUsd, true)} total volume</span>
+      </div>
+      <div className="table-wrap">
+        <table className="nested-table">
+          <thead>
+            <tr>
+              <th>Wallet</th>
+              <th>Type</th>
+              <th className="numeric">Volume</th>
+              <th className="numeric">Buys</th>
+              <th className="numeric">Bonds</th>
+              <th>First Buy</th>
+              <th>Last Buy</th>
+              <th>Tier</th>
+              <th>Chains</th>
+            </tr>
+          </thead>
+          <tbody>
+            {detail.wallets.map((wallet) => {
+              const walletKey = `${detail.month}:${wallet.wallet}`;
+              const walletOpen = Boolean(expandedWallets[walletKey]);
+              return (
+                <Fragment key={wallet.wallet}>
+                  <tr className="drilldown-row">
+                    <td>
+                      <button className="expand-link" onClick={() => onToggleWallet(detail.month, wallet.wallet)}>
+                        {walletOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                        <WalletCards size={15} />
+                        <span>{shortenAddress(wallet.wallet)}</span>
+                      </button>
+                    </td>
+                    <td>
+                      <span className={`buyer-pill ${wallet.buyerType}`}>{buyerTypeLabel(wallet.buyerType)}</span>
+                    </td>
+                    <td className="numeric strong">{formatUsd(wallet.monthVolumeUsd)}</td>
+                    <td className="numeric">{formatNumber(wallet.monthBuys)}</td>
+                    <td className="numeric">{formatNumber(wallet.monthBonds)}</td>
+                    <td>{formatDate(wallet.firstBuyAt)}</td>
+                    <td>{formatDate(wallet.lastBuyAt)}</td>
+                    <td>
+                      <span className={`tier tier-${wallet.tier ?? "none"}`}>{wallet.tierLabel}</span>
+                    </td>
+                    <td>{wallet.chainLabels.join(", ") || "-"}</td>
+                  </tr>
+                  {walletOpen && (
+                    <tr className="purchase-detail-row">
+                      <td colSpan={9}>
+                        <WalletPurchases wallet={wallet} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function WalletPurchases({ wallet }: { wallet: AcquisitionWalletRow }) {
+  return (
+    <div className="purchase-drilldown">
+      <div className="drilldown-summary compact">
+        <span>{formatNumber(wallet.purchases.length)} purchases</span>
+        <span>{formatUsd(wallet.monthVolumeUsd, true)} wallet volume</span>
+      </div>
+      <div className="table-wrap">
+        <table className="nested-table purchase-table">
+          <thead>
+            <tr>
+              <th>Bond</th>
+              <th>Contract</th>
+              <th className="numeric">Amount Paid</th>
+              <th className="numeric">Token Amount</th>
+              <th>Tier</th>
+              <th>Chain</th>
+              <th>Sale Date</th>
+              <th>Tx</th>
+            </tr>
+          </thead>
+          <tbody>
+            {wallet.purchases.map((sale) => (
+              <tr key={sale.key}>
+                <td>{sale.lp}</td>
+                <td>
+                  <button className="wallet-link" onClick={() => navigate(bondPath(sale.contractAddress))}>
+                    <BadgeDollarSign size={15} />
+                    <span>{shortenAddress(sale.contractAddress)}</span>
+                  </button>
+                </td>
+                <td className="numeric strong">{formatUsd(sale.dollarValue)}</td>
+                <td className="numeric">{formatNumber(Math.round(sale.payout))}</td>
+                <td>{sale.tier === null ? "No tier" : TIER_LABELS[sale.tier] ?? `Tier ${sale.tier}`}</td>
+                <td>{sale.chainId ?? "-"}</td>
+                <td>{formatDate(sale.createdAt)}</td>
+                <td>{sale.transactionHash ? shortenAddress(sale.transactionHash) : "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function AcquisitionPage() {
   const [data, setData] = useState<AcquisitionReadyResponse | null>(null);
   const [building, setBuilding] = useState<AcquisitionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
+  const [monthDetails, setMonthDetails] = useState<Record<string, AcquisitionMonthDetailReadyResponse>>({});
+  const [monthDetailLoading, setMonthDetailLoading] = useState<Record<string, boolean>>({});
+  const [monthDetailErrors, setMonthDetailErrors] = useState<Record<string, string>>({});
+  const [expandedWallets, setExpandedWallets] = useState<Record<string, boolean>>({});
   const requestSeq = useRef(0);
 
   const load = async () => {
@@ -871,6 +1021,41 @@ function AcquisitionPage() {
     return () => window.clearInterval(timer);
   }, [building]);
 
+  const toggleMonth = async (month: string) => {
+    if (expandedMonths[month]) {
+      setExpandedMonths((current) => ({ ...current, [month]: false }));
+      return;
+    }
+
+    setExpandedMonths((current) => ({ ...current, [month]: true }));
+    if (monthDetails[month]) return;
+
+    setMonthDetailLoading((current) => ({ ...current, [month]: true }));
+    setMonthDetailErrors((current) => {
+      const next = { ...current };
+      delete next[month];
+      return next;
+    });
+
+    try {
+      const result = await fetchMonthlyAcquisitionDetail(month);
+      if (result.status === "building") return;
+      setMonthDetails((current) => ({ ...current, [month]: result }));
+    } catch (err) {
+      setMonthDetailErrors((current) => ({
+        ...current,
+        [month]: err instanceof Error ? err.message : "Unable to load month detail"
+      }));
+    } finally {
+      setMonthDetailLoading((current) => ({ ...current, [month]: false }));
+    }
+  };
+
+  const toggleWallet = (month: string, wallet: string) => {
+    const key = `${month}:${wallet}`;
+    setExpandedWallets((current) => ({ ...current, [key]: !current[key] }));
+  };
+
   const chartData = useMemo<AcquisitionChartPoint[]>(
     () =>
       (data?.rows ?? []).map((row) => ({
@@ -881,7 +1066,7 @@ function AcquisitionPage() {
   );
   const latest = data?.summary.latestMonth ?? null;
   const peak = data?.summary.peakFirstTimeBuyerMonth ?? null;
-  const recentRows = useMemo(() => [...(data?.rows ?? [])].slice(-12).reverse(), [data]);
+  const monthlyRows = useMemo(() => [...(data?.rows ?? [])].reverse(), [data]);
 
   return (
     <main className="app-shell">
@@ -1044,7 +1229,7 @@ function AcquisitionPage() {
       <section className="table-panel full">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Recent monthly detail</p>
+            <p className="eyebrow">Monthly drilldown</p>
             <h2>First-time vs repeat buyer mix</h2>
           </div>
           <span>{data ? `${formatNumber(data.summary.uniqueBuyers)} historical buyers` : "0 buyers"}</span>
@@ -1070,17 +1255,58 @@ function AcquisitionPage() {
                 </tr>
               </thead>
               <tbody>
-                {recentRows.map((row) => (
-                  <tr key={row.month}>
-                    <td>{formatMonth(row.monthStart, true)}</td>
-                    <td className="numeric strong">{formatUsd(row.firstTimeBuyerVolumeUsd)}</td>
-                    <td className="numeric">{formatUsd(row.repeatBuyerVolumeUsd)}</td>
-                    <td className="numeric strong">{formatShare(row.firstTimeBuyerVolumeSharePct)}</td>
-                    <td className="numeric">{formatNumber(row.firstTimeBuyers)}</td>
-                    <td className="numeric">{formatNumber(row.repeatBuyers)}</td>
-                    <td className="numeric">{formatNumber(row.totalBuys)}</td>
-                  </tr>
-                ))}
+                {monthlyRows.map((row) => {
+                  const monthOpen = Boolean(expandedMonths[row.month]);
+                  const detail = monthDetails[row.month];
+                  const detailError = monthDetailErrors[row.month];
+
+                  return (
+                    <Fragment key={row.month}>
+                      <tr className={monthOpen ? "expanded-row" : undefined}>
+                        <td>
+                          <button className="expand-link" onClick={() => void toggleMonth(row.month)}>
+                            {monthOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                            <span>{formatMonth(row.monthStart, true)}</span>
+                          </button>
+                        </td>
+                        <td className="numeric strong">{formatUsd(row.firstTimeBuyerVolumeUsd)}</td>
+                        <td className="numeric">{formatUsd(row.repeatBuyerVolumeUsd)}</td>
+                        <td className="numeric strong">{formatShare(row.firstTimeBuyerVolumeSharePct)}</td>
+                        <td className="numeric">{formatNumber(row.firstTimeBuyers)}</td>
+                        <td className="numeric">{formatNumber(row.repeatBuyers)}</td>
+                        <td className="numeric">{formatNumber(row.totalBuys)}</td>
+                      </tr>
+                      {monthOpen && (
+                        <tr className="month-detail-row">
+                          <td colSpan={7}>
+                            {monthDetailLoading[row.month] ? (
+                              <div className="drilldown-empty">
+                                <TrendingUp size={18} />
+                                <span>Loading wallets for {formatMonth(row.monthStart, true)}</span>
+                              </div>
+                            ) : detailError ? (
+                              <div className="drilldown-empty error-copy">
+                                <Search size={18} />
+                                <span>{detailError}</span>
+                              </div>
+                            ) : detail ? (
+                              <AcquisitionMonthDetailPanel
+                                detail={detail}
+                                expandedWallets={expandedWallets}
+                                onToggleWallet={toggleWallet}
+                              />
+                            ) : (
+                              <div className="drilldown-empty">
+                                <Search size={18} />
+                                <span>No wallet detail loaded</span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

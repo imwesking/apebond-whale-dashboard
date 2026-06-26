@@ -106,6 +106,50 @@ export interface AcquisitionBuildingResponse {
 
 export type AcquisitionResponse = AcquisitionReadyResponse | AcquisitionBuildingResponse;
 
+export type AcquisitionBuyerType = "first_time" | "repeat";
+
+export interface AcquisitionWalletRow {
+  wallet: string;
+  buyerType: AcquisitionBuyerType;
+  firstBuyAt: number;
+  monthVolumeUsd: number;
+  monthBuys: number;
+  monthBonds: number;
+  lastBuyAt: number;
+  lastBuyUsd: number;
+  tier: number | null;
+  tierLabel: string;
+  chains: number[];
+  chainLabels: string[];
+  purchases: NormalizedSale[];
+}
+
+export interface AcquisitionMonthDetailReadyResponse {
+  status: "ready";
+  month: string;
+  monthStart: number;
+  summary: AcquisitionMonthRow;
+  wallets: AcquisitionWalletRow[];
+  totalWallets: number;
+  progress?: ProgressState;
+  warnings: string[];
+}
+
+export interface AcquisitionMonthDetailBuildingResponse {
+  status: "building";
+  month: string;
+  monthStart: null;
+  summary: null;
+  wallets: [];
+  totalWallets: 0;
+  progress: ProgressState;
+  warnings: string[];
+}
+
+export type AcquisitionMonthDetailResponse =
+  | AcquisitionMonthDetailReadyResponse
+  | AcquisitionMonthDetailBuildingResponse;
+
 export interface BondRow {
   contractAddress: string;
   label: string;

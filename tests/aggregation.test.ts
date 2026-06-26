@@ -1,4 +1,11 @@
-import { aggregateWhales, buildMonthlyAcquisition, buildSummary, filterSales, normalizeSales } from "../server/aggregation";
+import {
+  aggregateWhales,
+  buildMonthlyAcquisition,
+  buildMonthlyAcquisitionDetail,
+  buildSummary,
+  filterSales,
+  normalizeSales
+} from "../server/aggregation";
 import { buildPartnerGroups, makePartnerPath } from "../server/partners";
 import { parseWhaleQuery } from "../server/query";
 import { getTierLabel } from "../server/tiers";
@@ -129,6 +136,42 @@ describe("aggregation", () => {
       firstTimeBuyerVolumeUsd: 0,
       repeatBuyerVolumeUsd: 25,
       repeatBuyers: 1
+    });
+  });
+
+  it("builds monthly acquisition wallet drilldown with purchases", () => {
+    const normalized: NormalizedSale[] = [
+      makeNormalizedSale("0x1111111111111111111111111111111111111111", "2026-01-10", 100, "a"),
+      makeNormalizedSale("0x1111111111111111111111111111111111111111", "2026-02-12", 50, "b"),
+      makeNormalizedSale("0x2222222222222222222222222222222222222222", "2026-02-14", 200, "c"),
+      makeNormalizedSale("0x2222222222222222222222222222222222222222", "2026-02-20", 40, "d")
+    ];
+
+    const detail = buildMonthlyAcquisitionDetail(normalized, "2026-02");
+
+    expect(detail.summary).toMatchObject({
+      month: "2026-02",
+      totalVolumeUsd: 290,
+      firstTimeBuyerVolumeUsd: 240,
+      repeatBuyerVolumeUsd: 50,
+      firstTimeBuyers: 1,
+      repeatBuyers: 1
+    });
+    expect(detail.wallets.map((wallet) => wallet.wallet)).toEqual([
+      "0x2222222222222222222222222222222222222222",
+      "0x1111111111111111111111111111111111111111"
+    ]);
+    expect(detail.wallets[0]).toMatchObject({
+      buyerType: "first_time",
+      monthVolumeUsd: 240,
+      monthBuys: 2,
+      monthBonds: 1
+    });
+    expect(detail.wallets[0].purchases.map((purchase) => purchase.key)).toEqual(["d", "c"]);
+    expect(detail.wallets[1]).toMatchObject({
+      buyerType: "repeat",
+      monthVolumeUsd: 50,
+      monthBuys: 1
     });
   });
 

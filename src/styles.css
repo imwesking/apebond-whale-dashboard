@@ -545,6 +545,16 @@ tbody tr:hover {
   background: #f7faf7;
 }
 
+.expanded-row,
+.expanded-row:hover {
+  background: #f7faf7;
+}
+
+.month-detail-row > td {
+  padding: 0;
+  background: #f7faf7;
+}
+
 .numeric {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -564,6 +574,119 @@ tbody tr:hover {
   cursor: pointer;
   padding: 0;
   font-weight: 800;
+}
+
+.expand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--accent-2);
+  cursor: pointer;
+  padding: 0;
+  font-weight: 800;
+  text-align: left;
+}
+
+.month-drilldown {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.drilldown-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.drilldown-summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 0 9px;
+}
+
+.drilldown-summary.compact {
+  margin-bottom: 8px;
+}
+
+.nested-table {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 0.84rem;
+}
+
+.nested-table th,
+.nested-table td {
+  padding: 9px 10px;
+}
+
+.nested-table tr:last-child > td {
+  border-bottom: 0;
+}
+
+.drilldown-row {
+  background: var(--surface);
+}
+
+.purchase-detail-row > td {
+  padding: 0 10px 12px 34px;
+  background: #f7faf7;
+}
+
+.purchase-drilldown {
+  padding: 10px;
+  border-left: 3px solid rgba(47, 111, 159, 0.28);
+}
+
+.buyer-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.buyer-pill.first_time {
+  border-color: rgba(15, 123, 97, 0.35);
+  background: rgba(15, 123, 97, 0.1);
+  color: #0c5d49;
+}
+
+.buyer-pill.repeat {
+  border-color: rgba(181, 107, 22, 0.32);
+  background: rgba(181, 107, 22, 0.1);
+  color: #71420c;
+}
+
+.drilldown-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 72px;
+  color: var(--muted);
+  font-weight: 800;
+  padding: 14px;
+}
+
+.drilldown-empty.error-copy {
+  color: var(--danger);
 }
 
 .plain-icon {

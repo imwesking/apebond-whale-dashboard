@@ -1,6 +1,16 @@
 import { getChainLabel, getTierLabel } from "./tiers.js";
 import { derivePayoutToken, makePartnerKey } from "./partners.js";
-import type { AcquisitionMonthRow, ApeBondSale, DashboardSummary, NormalizedSale, Scope, SortKey, WhaleWallet } from "./types.js";
+import type {
+  AcquisitionBuyerType,
+  AcquisitionMonthRow,
+  AcquisitionWalletRow,
+  ApeBondSale,
+  DashboardSummary,
+  NormalizedSale,
+  Scope,
+  SortKey,
+  WhaleWallet
+} from "./types.js";
 
 export const LOW_VALUE_USD = 10;
 
@@ -313,19 +323,29 @@ interface MutableAcquisitionMonth {
   repeatBuys: number;
 }
 
+interface WalletFirstBuy {
+  createdAt: number;
+  month: string;
+}
+
+interface MutableAcquisitionWallet {
+  wallet: string;
+  buyerType: AcquisitionBuyerType;
+  firstBuyAt: number;
+  monthVolumeUsd: number;
+  monthBuys: number;
+  bonds: Set<string>;
+  chains: Set<number>;
+  lastBuyAt: number;
+  lastBuyUsd: number;
+  tier: number | null;
+  purchases: NormalizedSale[];
+}
+
 export function buildMonthlyAcquisition(sales: NormalizedSale[]): AcquisitionMonthRow[] {
   if (sales.length === 0) return [];
 
-  const firstBuyMonthByWallet = new Map<string, string>();
-  const firstBuyAtByWallet = new Map<string, number>();
-
-  for (const sale of sales) {
-    const current = firstBuyAtByWallet.get(sale.wallet);
-    if (current === undefined || sale.createdAt < current) {
-      firstBuyAtByWallet.set(sale.wallet, sale.createdAt);
-      firstBuyMonthByWallet.set(sale.wallet, getUtcMonthKey(sale.createdAt));
-    }
-  }
+  const firstBuyByWallet = getFirstBuyByWallet(sales);
 
   const months = new Map<string, MutableAcquisitionMonth>();
   let minMonthStart = Number.POSITIVE_INFINITY;
@@ -338,7 +358,7 @@ export function buildMonthlyAcquisition(sales: NormalizedSale[]): AcquisitionMon
     maxMonthStart = Math.max(maxMonthStart, monthStart);
 
     const current = getMutableAcquisitionMonth(months, month, monthStart);
-    const isFirstTimeBuyerMonth = firstBuyMonthByWallet.get(sale.wallet) === month;
+    const isFirstTimeBuyerMonth = firstBuyByWallet.get(sale.wallet)?.month === month;
 
     current.totalVolumeUsd += sale.dollarValue;
     current.totalBuyers.add(sale.wallet);
@@ -363,6 +383,117 @@ export function buildMonthlyAcquisition(sales: NormalizedSale[]): AcquisitionMon
   }
 
   return rows;
+}
+
+export function buildMonthlyAcquisitionDetail(sales: NormalizedSale[], requestedMonth: string) {
+  const firstBuyByWallet = getFirstBuyByWallet(sales);
+  const monthStart = getMonthStartFromKey(requestedMonth);
+  const month = getUtcMonthKey(monthStart);
+  const wallets = new Map<string, MutableAcquisitionWallet>();
+  const summary = getMutableAcquisitionMonth(new Map<string, MutableAcquisitionMonth>(), month, monthStart);
+
+  for (const sale of sales) {
+    if (getUtcMonthKey(sale.createdAt) !== month) continue;
+
+    const firstBuy = firstBuyByWallet.get(sale.wallet);
+    const buyerType: AcquisitionBuyerType = firstBuy?.month === month ? "first_time" : "repeat";
+    const current =
+      wallets.get(sale.wallet) ??
+      ({
+        wallet: sale.wallet,
+        buyerType,
+        firstBuyAt: firstBuy?.createdAt ?? sale.createdAt,
+        monthVolumeUsd: 0,
+        monthBuys: 0,
+        bonds: new Set<string>(),
+        chains: new Set<number>(),
+        lastBuyAt: 0,
+        lastBuyUsd: 0,
+        tier: null,
+        purchases: []
+      } satisfies MutableAcquisitionWallet);
+
+    current.monthVolumeUsd += sale.dollarValue;
+    current.monthBuys += 1;
+    current.bonds.add(sale.contractAddress);
+    if (sale.chainId !== null) current.chains.add(sale.chainId);
+    if (sale.createdAt > current.lastBuyAt) {
+      current.lastBuyAt = sale.createdAt;
+      current.lastBuyUsd = sale.dollarValue;
+      current.tier = sale.tier ?? current.tier;
+    }
+    current.purchases.push(sale);
+    wallets.set(sale.wallet, current);
+
+    summary.totalVolumeUsd += sale.dollarValue;
+    summary.totalBuyers.add(sale.wallet);
+    summary.totalBuys += 1;
+    if (buyerType === "first_time") {
+      summary.firstTimeBuyerVolumeUsd += sale.dollarValue;
+      summary.firstTimeBuyers.add(sale.wallet);
+      summary.firstTimeBuys += 1;
+    } else {
+      summary.repeatBuyerVolumeUsd += sale.dollarValue;
+      summary.repeatBuyers.add(sale.wallet);
+      summary.repeatBuys += 1;
+    }
+  }
+
+  const rows: AcquisitionWalletRow[] = Array.from(wallets.values())
+    .map((wallet) => {
+      const chains = Array.from(wallet.chains).sort((a, b) => a - b);
+      const purchases = [...wallet.purchases].sort((a, b) => b.createdAt - a.createdAt || b.dollarValue - a.dollarValue);
+
+      return {
+        wallet: wallet.wallet,
+        buyerType: wallet.buyerType,
+        firstBuyAt: wallet.firstBuyAt,
+        monthVolumeUsd: wallet.monthVolumeUsd,
+        monthBuys: wallet.monthBuys,
+        monthBonds: wallet.bonds.size,
+        lastBuyAt: wallet.lastBuyAt,
+        lastBuyUsd: wallet.lastBuyUsd,
+        tier: wallet.tier,
+        tierLabel: getTierLabel(wallet.tier),
+        chains,
+        chainLabels: chains.map(getChainLabel),
+        purchases
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.monthVolumeUsd - a.monthVolumeUsd ||
+        b.monthBuys - a.monthBuys ||
+        b.lastBuyAt - a.lastBuyAt ||
+        a.wallet.localeCompare(b.wallet)
+    );
+
+  return {
+    month,
+    monthStart,
+    summary: toAcquisitionMonthRow(summary),
+    wallets: rows
+  };
+}
+
+export function isValidAcquisitionMonth(value: string): boolean {
+  return /^\d{4}-\d{2}$/.test(value) && getUtcMonthKey(getMonthStartFromKey(value)) === value;
+}
+
+function getFirstBuyByWallet(sales: NormalizedSale[]): Map<string, WalletFirstBuy> {
+  const firstBuyByWallet = new Map<string, WalletFirstBuy>();
+
+  for (const sale of sales) {
+    const current = firstBuyByWallet.get(sale.wallet);
+    if (current === undefined || sale.createdAt < current.createdAt) {
+      firstBuyByWallet.set(sale.wallet, {
+        createdAt: sale.createdAt,
+        month: getUtcMonthKey(sale.createdAt)
+      });
+    }
+  }
+
+  return firstBuyByWallet;
 }
 
 function getMutableAcquisitionMonth(months: Map<string, MutableAcquisitionMonth>, month: string, monthStart: number) {
@@ -420,4 +551,10 @@ function getUtcMonthStart(unixSeconds: number): number {
 function addUtcMonth(monthStart: number): number {
   const date = new Date(monthStart * 1000);
   return Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) / 1000);
+}
+
+function getMonthStartFromKey(month: string): number {
+  const [year, monthNumber] = month.split("-").map(Number);
+  if (!Number.isInteger(year) || !Number.isInteger(monthNumber)) return NaN;
+  return Math.floor(Date.UTC(year, monthNumber - 1, 1) / 1000);
 }

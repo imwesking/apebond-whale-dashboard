@@ -283,6 +283,27 @@ describe("API", () => {
     expect(response.body.summary.latestMonth.firstTimeBuyerVolumeUsd).toBe(200);
     expect(response.body.summary.latestMonth.repeatBuyerVolumeUsd).toBe(50);
     expect(response.body.summary.latestMonth.firstTimeBuyerVolumeSharePct).toBe(80);
+
+    const detail = await request(createServer(service)).get("/api/acquisition/monthly/2026-02");
+
+    expect(detail.status).toBe(200);
+    expect(detail.body.totalWallets).toBe(2);
+    expect(detail.body.wallets[0]).toMatchObject({
+      wallet: "0x2222222222222222222222222222222222222222",
+      buyerType: "first_time",
+      monthVolumeUsd: 200,
+      monthBuys: 1
+    });
+    expect(detail.body.wallets[0].purchases[0]).toMatchObject({
+      contractAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      dollarValue: 200,
+      transactionHash: "0xfebnew"
+    });
+    expect(detail.body.wallets[1]).toMatchObject({
+      wallet: "0x1111111111111111111111111111111111111111",
+      buyerType: "repeat",
+      monthVolumeUsd: 50
+    });
   });
 
   it("returns wallet detail", async () => {

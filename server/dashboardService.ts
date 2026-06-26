@@ -1,6 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { aggregateWhales, buildMonthlyAcquisition, buildSummary, filterSales, normalizeSales } from "./aggregation.js";
+import {
+  aggregateWhales,
+  buildMonthlyAcquisition,
+  buildMonthlyAcquisitionDetail,
+  buildSummary,
+  filterSales,
+  isValidAcquisitionMonth,
+  normalizeSales
+} from "./aggregation.js";
 import { ApeBondApiError, type ApeBondDataClient } from "./apeBondClient.js";
 import {
   buildBondRow,
@@ -12,6 +20,7 @@ import {
   normalizeAddress
 } from "./partners.js";
 import type {
+  AcquisitionMonthDetailReadyResponse,
   AcquisitionReadyResponse,
   AcquisitionSummary,
   ApeBondSale,
@@ -210,6 +219,26 @@ export class DashboardService {
       status: "ready",
       rows,
       summary: buildAcquisitionSummary(sales, rows, source?.lastRefreshed),
+      progress: this.getProgress(),
+      warnings: this.allTime.failures
+    };
+  }
+
+  async getMonthlyAcquisitionDetail(month: string): Promise<AcquisitionMonthDetailReadyResponse> {
+    if (!isValidAcquisitionMonth(month)) {
+      throw new Error(`Invalid acquisition month: ${month}`);
+    }
+
+    const { sales } = await this.getSalesForScope("all", false);
+    const detail = buildMonthlyAcquisitionDetail(sales, month);
+
+    return {
+      status: "ready",
+      month: detail.month,
+      monthStart: detail.monthStart,
+      summary: detail.summary,
+      wallets: detail.wallets,
+      totalWallets: detail.wallets.length,
       progress: this.getProgress(),
       warnings: this.allTime.failures
     };

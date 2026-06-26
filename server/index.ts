@@ -83,6 +83,27 @@ export function createServer(service = new DashboardService(new ApeBondClient())
     }
   });
 
+  app.get("/api/acquisition/monthly/:month", async (request, response, next) => {
+    try {
+      response.json(await service.getMonthlyAcquisitionDetail(request.params.month));
+    } catch (error) {
+      if (error instanceof BuildingError) {
+        response.status(202).json({
+          status: "building",
+          month: request.params.month,
+          monthStart: null,
+          summary: null,
+          wallets: [],
+          totalWallets: 0,
+          progress: error.progress,
+          warnings: []
+        });
+        return;
+      }
+      next(error);
+    }
+  });
+
   app.get("/api/wallet/:address", async (request, response, next) => {
     try {
       response.json(await service.getWalletDetail(request.params.address));
