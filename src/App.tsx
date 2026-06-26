@@ -993,6 +993,7 @@ function AcquisitionPage() {
                     dataKey="firstTimeBuyerVolumeUsd"
                     radius={[4, 4, 0, 0]}
                     fill="#0f7b61"
+                    isAnimationActive={false}
                   />
                   <Line
                     yAxisId="share"
@@ -1003,6 +1004,7 @@ function AcquisitionPage() {
                     strokeWidth={3}
                     dot={false}
                     activeDot={{ r: 5 }}
+                    isAnimationActive={false}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
