@@ -39,6 +39,8 @@ const SORT_FIELDS: Record<SortKey, string> = {
   wallet_desc: "wallet"
 };
 
+const MAX_ROW_LIMIT = 5000;
+
 export function parseScope(value: unknown): Scope {
   if (value === "all" || value === undefined) return "all";
   if (typeof value === "string" && VALID_PERIOD_SCOPES.includes(value as never)) return value as Scope;
@@ -54,16 +56,7 @@ export function parseWhaleQuery(query: Record<string, unknown>): WhaleQuery {
       : query.tier !== undefined && query.tier !== ""
         ? Number(query.tier)
         : undefined;
-  const limit = Math.min(Math.max(Number(query.limit) || 50, 1), 250);
-  const offset = Math.max(Number(query.offset) || 0, 0);
-  const sort = SORTS.includes(query.sort as SortKey) ? (query.sort as SortKey) : "volume_desc";
-  const requestedSecondarySort = SORTS.includes(query.secondarySort as SortKey)
-    ? (query.secondarySort as SortKey)
-    : undefined;
-  const secondarySort =
-    requestedSecondarySort && SORT_FIELDS[requestedSecondarySort] !== SORT_FIELDS[sort]
-      ? requestedSecondarySort
-      : undefined;
+  const { limit, offset, sort, secondarySort } = parseWalletRowsQuery(query, 50);
   const partnerKeys = parsePartnerKeys(query.partners);
   const dateFrom = parseDateBoundary(query.dateFrom ?? query.from, "start", "dateFrom");
   const dateTo = parseDateBoundary(query.dateTo ?? query.to, "end", "dateTo");
@@ -86,6 +79,24 @@ export function parseWhaleQuery(query: Record<string, unknown>): WhaleQuery {
     sort,
     secondarySort
   };
+}
+
+export function parseWalletRowsQuery(
+  query: Record<string, unknown>,
+  defaultLimit = 100
+): Pick<WhaleQuery, "limit" | "offset" | "sort" | "secondarySort"> {
+  const limit = Math.min(Math.max(Number(query.limit) || defaultLimit, 1), MAX_ROW_LIMIT);
+  const offset = Math.max(Number(query.offset) || 0, 0);
+  const sort = SORTS.includes(query.sort as SortKey) ? (query.sort as SortKey) : "volume_desc";
+  const requestedSecondarySort = SORTS.includes(query.secondarySort as SortKey)
+    ? (query.secondarySort as SortKey)
+    : undefined;
+  const secondarySort =
+    requestedSecondarySort && SORT_FIELDS[requestedSecondarySort] !== SORT_FIELDS[sort]
+      ? requestedSecondarySort
+      : undefined;
+
+  return { limit, offset, sort, secondarySort };
 }
 
 function parseDateBoundary(value: unknown, boundary: "start" | "end", field: string): number | undefined {

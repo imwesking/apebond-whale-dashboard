@@ -34,6 +34,7 @@ import type {
   PeriodScope,
   ProgressState,
   Scope,
+  SortKey,
   WhaleQuery,
   WhaleResponse,
   WalletDetail
@@ -107,9 +108,29 @@ interface CachedPartner {
   detail: PartnerDetailResponse;
 }
 
+interface WalletRowsOptions {
+  limit: number;
+  offset: number;
+  sort: SortKey;
+  secondarySort?: SortKey;
+}
+
 interface CachedBond {
   expiresAt: number;
   detail: BondDetailResponse;
+}
+
+function normalizeWalletRowsOptions(options?: Partial<WalletRowsOptions>): WalletRowsOptions {
+  return {
+    limit: Math.min(Math.max(Number(options?.limit) || 100, 1), 5000),
+    offset: Math.max(Number(options?.offset) || 0, 0),
+    sort: options?.sort ?? "volume_desc",
+    secondarySort: options?.secondarySort
+  };
+}
+
+function isDefaultWalletRowsOptions(options: WalletRowsOptions): boolean {
+  return options.limit === 100 && options.offset === 0 && options.sort === "volume_desc" && !options.secondarySort;
 }
 
 export class BuildingError extends Error {
@@ -316,7 +337,12 @@ export class DashboardService {
     };
   }
 
-  async getPartnerDetail(chainSegment: string, token: string): Promise<PartnerDetailResponse> {
+  async getPartnerDetail(
+    chainSegment: string,
+    token: string,
+    walletRowsOptions?: Partial<WalletRowsOptions>
+  ): Promise<PartnerDetailResponse> {
+    const options = normalizeWalletRowsOptions(walletRowsOptions);
     const { groups } = await this.getPartnerGroups();
     const group = findPartnerGroup(groups, chainSegment, token);
     if (!group) {
@@ -325,7 +351,7 @@ export class DashboardService {
 
     const cacheKey = group.partner.key;
     const cached = this.partnerCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (isDefaultWalletRowsOptions(options) && cached && cached.expiresAt > Date.now()) {
       return cached.detail;
     }
 
@@ -334,7 +360,7 @@ export class DashboardService {
     const bonds = buildBondRows(rawBonds.length > 0 ? rawBonds : group.rawBonds);
     const rawSales = (data.Sales ?? []).filter((sale) => this.rawBondMatchesPartner(sale, group.contractSet, group.partner.key));
     const sales = normalizeSales(rawSales);
-    const whales = aggregateWhales(sales, "volume_desc", "last_desc");
+    const whales = aggregateWhales(sales, options.sort, options.secondarySort);
     const summary = buildSummary("all", sales, whales, { lastRefreshed: new Date().toISOString() });
     const soldOutBonds = bonds.filter((bond) => bond.soldOut).length;
     const topBond = bonds[0] ?? null;
@@ -353,25 +379,28 @@ export class DashboardService {
       status: "ready",
       partner,
       bonds,
-      walletRows: whales.slice(0, 100),
+      walletRows: whales.slice(options.offset, options.offset + options.limit),
       totalWalletRows: whales.length,
       summary,
       warnings: rawSales.length === 0 ? ["Project sales endpoint returned no sales for this partner."] : []
     };
 
-    this.partnerCache.set(cacheKey, {
-      expiresAt: Date.now() + this.partnerCacheTtlMs,
-      detail
-    });
+    if (isDefaultWalletRowsOptions(options)) {
+      this.partnerCache.set(cacheKey, {
+        expiresAt: Date.now() + this.partnerCacheTtlMs,
+        detail
+      });
+    }
     return detail;
   }
 
-  async getBondDetail(address: string): Promise<BondDetailResponse> {
+  async getBondDetail(address: string, walletRowsOptions?: Partial<WalletRowsOptions>): Promise<BondDetailResponse> {
+    const options = normalizeWalletRowsOptions(walletRowsOptions);
     const normalizedAddress = normalizeAddress(address);
     if (!normalizedAddress) throw new Error(`Invalid bond address: ${address}`);
 
     const cached = this.bondCache.get(normalizedAddress);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (isDefaultWalletRowsOptions(options) && cached && cached.expiresAt > Date.now()) {
       return cached.detail;
     }
 
@@ -382,7 +411,7 @@ export class DashboardService {
     const data = await this.client.getBondSales(normalizedAddress);
     const rawSales = data.Sales ?? [];
     const sales = normalizeSales(rawSales);
-    const whales = aggregateWhales(sales, "volume_desc", "last_desc");
+    const whales = aggregateWhales(sales, options.sort, options.secondarySort);
     const summary = buildSummary("all", sales, whales, { lastRefreshed: new Date().toISOString() });
     const latestSale = rawSales.reduce<ApeBondSale | null>(
       (latest, sale) => (!latest || Number(sale.createdAt) > Number(latest.createdAt) ? sale : latest),
@@ -401,17 +430,19 @@ export class DashboardService {
     const detail: BondDetailResponse = {
       status: "ready",
       bond: buildBondRow(rawBond),
-      walletRows: whales.slice(0, 100),
+      walletRows: whales.slice(options.offset, options.offset + options.limit),
       totalWalletRows: whales.length,
       summary,
       sales,
       warnings: rawSales.length === 0 ? ["Bond endpoint returned no sales for this contract."] : []
     };
 
-    this.bondCache.set(normalizedAddress, {
-      expiresAt: Date.now() + this.bondCacheTtlMs,
-      detail
-    });
+    if (isDefaultWalletRowsOptions(options)) {
+      this.bondCache.set(normalizedAddress, {
+        expiresAt: Date.now() + this.bondCacheTtlMs,
+        detail
+      });
+    }
     return detail;
   }
 

@@ -332,8 +332,61 @@ describe("API", () => {
     expect(bond.body.summary.totalVolumeUsd).toBe(125);
     expect(bond.body.walletRows[0].wallet).toBe("0x1111111111111111111111111111111111111111");
   });
+
+  it("returns partner wallet rows by requested rank range", async () => {
+    const client: ApeBondDataClient = {
+      ...fakeClient,
+      async getProjectSales(project: string) {
+        return {
+          Bonds: [
+            {
+              lp: `USDC-${project}`,
+              payoutToken: project,
+              contractAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              chainId: 56,
+              totalSales: 3,
+              totalDollarValue: 600,
+              lastPurchaseDate: { createdAt: 300 }
+            }
+          ],
+          Sales: [
+            makeSale(project, "0x1111111111111111111111111111111111111111", 100, 100, "0xrange1"),
+            makeSale(project, "0x2222222222222222222222222222222222222222", 200, 200, "0xrange2"),
+            makeSale(project, "0x3333333333333333333333333333333333333333", 300, 300, "0xrange3")
+          ]
+        };
+      }
+    };
+    const app = createServer(new DashboardService(client, { cachePath: null, concurrency: 2, requestDelayMs: 0 }));
+
+    const response = await request(app).get("/api/partner/56/ELON?limit=1&offset=1");
+
+    expect(response.status).toBe(200);
+    expect(response.body.totalWalletRows).toBe(3);
+    expect(response.body.walletRows).toHaveLength(1);
+    expect(response.body.walletRows[0]).toMatchObject({
+      rank: 2,
+      wallet: "0x2222222222222222222222222222222222222222",
+      totalVolumeUsd: 200
+    });
+  });
 });
 
 function unixDate(isoDate: string): number {
   return Math.floor(Date.parse(`${isoDate}T00:00:00.000Z`) / 1000);
+}
+
+function makeSale(project: string, wallet: string, createdAt: number, dollarValue: number, transactionHash: string) {
+  return {
+    lp: `USDC-${project}`,
+    payoutToken: project,
+    contractAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    createdAddressOwner: wallet,
+    createdAt,
+    dollarValue,
+    payout: 1,
+    tier: 2,
+    chainId: 56,
+    transactionHash
+  };
 }

@@ -576,6 +576,95 @@ tbody tr:hover {
   font-weight: 800;
 }
 
+.wallet-address {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.wallet-drilldown-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.copy-button:hover,
+.copy-button.copied {
+  border-color: rgba(15, 123, 97, 0.24);
+  background: rgba(15, 123, 97, 0.09);
+  color: var(--accent);
+}
+
+.title-wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-wallet .copy-button {
+  width: 30px;
+  height: 30px;
+}
+
+.csv-export {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #f7faf7;
+}
+
+.csv-export label {
+  display: grid;
+  gap: 4px;
+}
+
+.csv-export label span,
+.export-status {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.csv-export input {
+  width: 92px;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.csv-export .icon-button {
+  min-height: 34px;
+}
+
+.export-status {
+  align-self: center;
+  margin-left: 2px;
+  text-transform: none;
+}
+
 .expand-link {
   display: inline-flex;
   align-items: center;

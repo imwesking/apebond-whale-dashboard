@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { startAllTimeRefreshScheduler } from "./allTimeRefreshScheduler.js";
 import { ApeBondClient } from "./apeBondClient.js";
 import { BuildingError, DashboardService } from "./dashboardService.js";
-import { parseScope, parseWhaleQuery } from "./query.js";
+import { parseScope, parseWalletRowsQuery, parseWhaleQuery } from "./query.js";
 
 export function createServer(service = new DashboardService(new ApeBondClient())) {
   const app = express();
@@ -122,7 +122,13 @@ export function createServer(service = new DashboardService(new ApeBondClient())
 
   app.get("/api/partner/:chainId/:token", async (request, response, next) => {
     try {
-      response.json(await service.getPartnerDetail(request.params.chainId, decodeURIComponent(request.params.token)));
+      response.json(
+        await service.getPartnerDetail(
+          request.params.chainId,
+          decodeURIComponent(request.params.token),
+          parseWalletRowsQuery(request.query)
+        )
+      );
     } catch (error) {
       next(error);
     }
@@ -130,7 +136,7 @@ export function createServer(service = new DashboardService(new ApeBondClient())
 
   app.get("/api/bond/:address", async (request, response, next) => {
     try {
-      response.json(await service.getBondDetail(request.params.address));
+      response.json(await service.getBondDetail(request.params.address, parseWalletRowsQuery(request.query)));
     } catch (error) {
       next(error);
     }

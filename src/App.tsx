@@ -3,8 +3,11 @@ import {
   BadgeDollarSign,
   ChevronDown,
   Boxes,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Download,
   ExternalLink,
   Layers3,
   ListFilter,
@@ -163,6 +166,11 @@ const CHART_COLORS = ["#0f7b61", "#2f6f9f", "#b56b16", "#7367a8", "#487646", "#9
 const PAGE_SIZE = 50;
 
 type AcquisitionChartPoint = AcquisitionMonthRow & { label: string };
+type WalletRow = WhaleReadyResponse["rows"][number];
+type ExportRange = { fromRank: number; toRank: number };
+type WalletExportLoader = (range: ExportRange) => Promise<WalletRow[]>;
+type CsvColumn<T> = { header: string; value: (row: T) => unknown };
+type AcquisitionWalletExportRow = AcquisitionWalletRow & { rank: number };
 
 function navigate(path: string) {
   window.history.pushState({}, "", path);
@@ -185,6 +193,200 @@ function partnerPath(partner: PartnerRow) {
 
 function bondPath(address: string) {
   return `/bond/${encodeURIComponent(address.toLowerCase())}`;
+}
+
+async function copyToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const field = document.createElement("textarea");
+  field.value = value;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.left = "-9999px";
+  document.body.appendChild(field);
+  field.select();
+  document.execCommand("copy");
+  document.body.removeChild(field);
+}
+
+function escapeCsv(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function toCsv<T>(rows: T[], columns: Array<CsvColumn<T>>): string {
+  const header = columns.map((column) => escapeCsv(column.header)).join(",");
+  const body = rows.map((row) => columns.map((column) => escapeCsv(column.value(row))).join(","));
+  return [header, ...body].join("\r\n");
+}
+
+function csvDate(timestamp: number | null | undefined): string {
+  return timestamp ? new Date(timestamp * 1000).toISOString() : "";
+}
+
+function sanitizeFilename(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90);
+}
+
+function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function walletRowsToCsv(rows: WalletRow[]): string {
+  return toCsv(rows, [
+    { header: "rank", value: (row) => row.rank },
+    { header: "wallet", value: (row) => row.wallet },
+    { header: "total_volume_usd", value: (row) => row.totalVolumeUsd },
+    { header: "total_buys", value: (row) => row.totalBuys },
+    { header: "total_bonds", value: (row) => row.totalBonds },
+    { header: "last_buy_at", value: (row) => csvDate(row.lastBuyAt) },
+    { header: "last_buy_usd", value: (row) => row.lastBuyUsd },
+    { header: "tier", value: (row) => row.tier ?? "" },
+    { header: "tier_label", value: (row) => row.tierLabel },
+    { header: "chains", value: (row) => row.chains.join("|") },
+    { header: "chain_labels", value: (row) => row.chainLabels.join("|") }
+  ]);
+}
+
+function acquisitionWalletRowsToCsv(rows: AcquisitionWalletExportRow[]): string {
+  return toCsv(rows, [
+    { header: "rank", value: (row) => row.rank },
+    { header: "wallet", value: (row) => row.wallet },
+    { header: "buyer_type", value: (row) => row.buyerType },
+    { header: "first_buy_at", value: (row) => csvDate(row.firstBuyAt) },
+    { header: "month_volume_usd", value: (row) => row.monthVolumeUsd },
+    { header: "month_buys", value: (row) => row.monthBuys },
+    { header: "month_bonds", value: (row) => row.monthBonds },
+    { header: "last_buy_at", value: (row) => csvDate(row.lastBuyAt) },
+    { header: "last_buy_usd", value: (row) => row.lastBuyUsd },
+    { header: "tier", value: (row) => row.tier ?? "" },
+    { header: "tier_label", value: (row) => row.tierLabel },
+    { header: "chains", value: (row) => row.chains.join("|") },
+    { header: "chain_labels", value: (row) => row.chainLabels.join("|") },
+    { header: "purchases", value: (row) => row.purchases.length }
+  ]);
+}
+
+function CopyButton({ value, label }: { value: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await copyToClipboard(value);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
+
+  return (
+    <button
+      className={`copy-button ${copied ? "copied" : ""}`}
+      type="button"
+      onClick={handleCopy}
+      title={copied ? "Copied" : (label ?? "Copy wallet")}
+      aria-label={copied ? "Copied" : (label ?? "Copy wallet")}
+    >
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+    </button>
+  );
+}
+
+function WalletAddressLink({ wallet }: { wallet: string }) {
+  return (
+    <span className="wallet-address">
+      <button className="wallet-link" type="button" onClick={() => navigate(`/address/${encodeURIComponent(wallet)}`)}>
+        <WalletCards size={15} />
+        <span>{shortenAddress(wallet)}</span>
+      </button>
+      <CopyButton value={wallet} label={`Copy ${shortenAddress(wallet)}`} />
+    </span>
+  );
+}
+
+function CsvRangeExport({
+  totalRows,
+  filenamePrefix,
+  onExport
+}: {
+  totalRows: number;
+  filenamePrefix: string;
+  onExport: (range: ExportRange) => Promise<number>;
+}) {
+  const [fromRank, setFromRank] = useState("1");
+  const [toRank, setToRank] = useState(String(Math.min(Math.max(totalRows, 1), 100)));
+  const [status, setStatus] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    setFromRank("1");
+    setToRank(String(Math.min(Math.max(totalRows, 1), 100)));
+    setStatus(null);
+  }, [filenamePrefix, totalRows]);
+
+  const handleExport = async () => {
+    const start = Number(fromRank);
+    const end = Number(toRank);
+
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > totalRows) {
+      setStatus(`Use ranks from 1 to ${formatNumber(totalRows)}.`);
+      return;
+    }
+
+    setExporting(true);
+    setStatus(null);
+    try {
+      const exportedRows = await onExport({ fromRank: start, toRank: end });
+      setStatus(`Exported ${formatNumber(exportedRows)} rows`);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not export CSV");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="csv-export" aria-label="CSV export">
+      <label>
+        <span>From rank</span>
+        <input
+          min={1}
+          max={Math.max(totalRows, 1)}
+          type="number"
+          value={fromRank}
+          onChange={(event) => setFromRank(event.target.value)}
+        />
+      </label>
+      <label>
+        <span>To rank</span>
+        <input
+          min={1}
+          max={Math.max(totalRows, 1)}
+          type="number"
+          value={toRank}
+          onChange={(event) => setToRank(event.target.value)}
+        />
+      </label>
+      <button className="icon-button" type="button" onClick={() => void handleExport()} disabled={exporting || totalRows === 0}>
+        <Download size={16} />
+        <span>{exporting ? "Exporting" : "Export CSV"}</span>
+      </button>
+      {status && <span className="export-status">{status}</span>}
+    </div>
+  );
 }
 
 function PageTabs({ active }: { active: "wallets" | "partners" | "acquisition" }) {
@@ -602,6 +804,29 @@ function Dashboard() {
     [summary]
   );
 
+  const exportWalletRows: WalletExportLoader = async ({ fromRank, toRank }) => {
+    const result = await fetchWhales({
+      scope,
+      chainId,
+      partnerKeys: partnerKeysForQuery,
+      tier,
+      q: query,
+      dateFrom,
+      dateTo,
+      hideLowValue,
+      limit: toRank - fromRank + 1,
+      offset: fromRank - 1,
+      sort,
+      secondarySort
+    });
+
+    if (result.status === "building") {
+      throw new Error("All-time index is still building");
+    }
+
+    return result.rows;
+  };
+
   return (
     <main className="app-shell">
       <header className="page-header">
@@ -743,7 +968,7 @@ function Dashboard() {
             <span>{data ? formatNumber(data.totalRows) : "0"} wallets</span>
           </div>
 
-          <WhaleTable data={data} sort={sort} onSort={handleHeaderSort} />
+          <WhaleTable data={data} sort={sort} onSort={handleHeaderSort} exportName="wallet-watch-wallets" onExportRows={exportWalletRows} />
 
           <div className="pager">
             <button className="icon-button" onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} disabled={offset === 0}>
@@ -861,6 +1086,15 @@ function AcquisitionMonthDetailPanel({
     );
   }
 
+  const exportWalletRows = async ({ fromRank, toRank }: ExportRange) => {
+    const rows = detail.wallets.slice(fromRank - 1, toRank).map((wallet, index) => ({
+      ...wallet,
+      rank: fromRank + index
+    }));
+    downloadCsv(`acquisition-${detail.month}-wallets-${fromRank}-${toRank}.csv`, acquisitionWalletRowsToCsv(rows));
+    return rows.length;
+  };
+
   return (
     <div className="month-drilldown">
       <div className="drilldown-summary">
@@ -868,10 +1102,12 @@ function AcquisitionMonthDetailPanel({
         <span>{formatNumber(detail.summary.totalBuys)} buys</span>
         <span>{formatUsd(detail.summary.totalVolumeUsd, true)} total volume</span>
       </div>
+      <CsvRangeExport totalRows={detail.totalWallets} filenamePrefix={`acquisition-${detail.month}-wallets`} onExport={exportWalletRows} />
       <div className="table-wrap">
         <table className="nested-table">
           <thead>
             <tr>
+              <th>Rank</th>
               <th>Wallet</th>
               <th>Type</th>
               <th className="numeric">Volume</th>
@@ -884,18 +1120,20 @@ function AcquisitionMonthDetailPanel({
             </tr>
           </thead>
           <tbody>
-            {detail.wallets.map((wallet) => {
+            {detail.wallets.map((wallet, index) => {
               const walletKey = `${detail.month}:${wallet.wallet}`;
               const walletOpen = Boolean(expandedWallets[walletKey]);
               return (
                 <Fragment key={wallet.wallet}>
                   <tr className="drilldown-row">
+                    <td>#{index + 1}</td>
                     <td>
-                      <button className="expand-link" onClick={() => onToggleWallet(detail.month, wallet.wallet)}>
-                        {walletOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                        <WalletCards size={15} />
-                        <span>{shortenAddress(wallet.wallet)}</span>
-                      </button>
+                      <span className="wallet-drilldown-cell">
+                        <button className="expand-link" onClick={() => onToggleWallet(detail.month, wallet.wallet)}>
+                          {walletOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                        </button>
+                        <WalletAddressLink wallet={wallet.wallet} />
+                      </span>
                     </td>
                     <td>
                       <span className={`buyer-pill ${wallet.buyerType}`}>{buyerTypeLabel(wallet.buyerType)}</span>
@@ -912,7 +1150,7 @@ function AcquisitionMonthDetailPanel({
                   </tr>
                   {walletOpen && (
                     <tr className="purchase-detail-row">
-                      <td colSpan={9}>
+                      <td colSpan={10}>
                         <WalletPurchases wallet={wallet} />
                       </td>
                     </tr>
@@ -1387,11 +1625,15 @@ function SaleSortHeader({
 function WhaleTable({
   data,
   sort,
-  onSort
+  onSort,
+  exportName = "wallets",
+  onExportRows
 }: {
   data: WhaleReadyResponse | null;
   sort: SortKey;
   onSort: (field: keyof typeof HEADER_SORTS) => void;
+  exportName?: string;
+  onExportRows?: WalletExportLoader;
 }) {
   if (!data) {
     return (
@@ -1411,68 +1653,83 @@ function WhaleTable({
     );
   }
 
+  const exportWalletRows = async (range: ExportRange) => {
+    const rows = onExportRows
+      ? await onExportRows(range)
+      : data.rows.filter((row) => row.rank >= range.fromRank && row.rank <= range.toRank);
+    const filename = `${sanitizeFilename(exportName)}-${range.fromRank}-${range.toRank}.csv`;
+    downloadCsv(filename, walletRowsToCsv(rows));
+    return rows.length;
+  };
+
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <SortHeader field="wallet" sort={sort} onSort={onSort}>
-              Wallet
-            </SortHeader>
-            <SortHeader field="volume" sort={sort} onSort={onSort} numeric>
-              Total Volume
-            </SortHeader>
-            <SortHeader field="buys" sort={sort} onSort={onSort} numeric>
-              Total Buys
-            </SortHeader>
-            <SortHeader field="bonds" sort={sort} onSort={onSort} numeric>
-              Total Bonds
-            </SortHeader>
-            <SortHeader field="last" sort={sort} onSort={onSort}>
-              Last Buy
-            </SortHeader>
-            <SortHeader field="lastBuyUsd" sort={sort} onSort={onSort} numeric>
-              Last Buy $
-            </SortHeader>
-            <SortHeader field="tier" sort={sort} onSort={onSort}>
-              Tier
-            </SortHeader>
-            <SortHeader field="chains" sort={sort} onSort={onSort}>
-              Chains
-            </SortHeader>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {data.rows.map((wallet) => (
-            <tr key={wallet.wallet}>
-              <td>#{wallet.rank}</td>
-              <td>
-                <button className="wallet-link" onClick={() => navigate(`/address/${encodeURIComponent(wallet.wallet)}`)}>
-                  <WalletCards size={15} />
-                  <span>{shortenAddress(wallet.wallet)}</span>
-                </button>
-              </td>
-              <td className="numeric strong">{formatUsd(wallet.totalVolumeUsd)}</td>
-              <td className="numeric">{formatNumber(wallet.totalBuys)}</td>
-              <td className="numeric">{formatNumber(wallet.totalBonds)}</td>
-              <td>{formatDate(wallet.lastBuyAt)}</td>
-              <td className="numeric">{formatUsd(wallet.lastBuyUsd)}</td>
-              <td>
-                <span className={`tier tier-${wallet.tier ?? "none"}`}>{wallet.tierLabel}</span>
-              </td>
-              <td>{wallet.chainLabels.join(", ") || "-"}</td>
-              <td>
-                <a className="plain-icon" href={`https://dashboard.ape.bond/address/${wallet.wallet}`} target="_blank" rel="noreferrer" title="Open original dashboard">
-                  <ExternalLink size={16} />
-                </a>
-              </td>
+    <>
+      <CsvRangeExport totalRows={data.totalRows} filenamePrefix={exportName} onExport={exportWalletRows} />
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <SortHeader field="wallet" sort={sort} onSort={onSort}>
+                Wallet
+              </SortHeader>
+              <SortHeader field="volume" sort={sort} onSort={onSort} numeric>
+                Total Volume
+              </SortHeader>
+              <SortHeader field="buys" sort={sort} onSort={onSort} numeric>
+                Total Buys
+              </SortHeader>
+              <SortHeader field="bonds" sort={sort} onSort={onSort} numeric>
+                Total Bonds
+              </SortHeader>
+              <SortHeader field="last" sort={sort} onSort={onSort}>
+                Last Buy
+              </SortHeader>
+              <SortHeader field="lastBuyUsd" sort={sort} onSort={onSort} numeric>
+                Last Buy $
+              </SortHeader>
+              <SortHeader field="tier" sort={sort} onSort={onSort}>
+                Tier
+              </SortHeader>
+              <SortHeader field="chains" sort={sort} onSort={onSort}>
+                Chains
+              </SortHeader>
+              <th />
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {data.rows.map((wallet) => (
+              <tr key={wallet.wallet}>
+                <td>#{wallet.rank}</td>
+                <td>
+                  <WalletAddressLink wallet={wallet.wallet} />
+                </td>
+                <td className="numeric strong">{formatUsd(wallet.totalVolumeUsd)}</td>
+                <td className="numeric">{formatNumber(wallet.totalBuys)}</td>
+                <td className="numeric">{formatNumber(wallet.totalBonds)}</td>
+                <td>{formatDate(wallet.lastBuyAt)}</td>
+                <td className="numeric">{formatUsd(wallet.lastBuyUsd)}</td>
+                <td>
+                  <span className={`tier tier-${wallet.tier ?? "none"}`}>{wallet.tierLabel}</span>
+                </td>
+                <td>{wallet.chainLabels.join(", ") || "-"}</td>
+                <td>
+                  <a
+                    className="plain-icon"
+                    href={`https://dashboard.ape.bond/address/${wallet.wallet}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open original dashboard"
+                  >
+                    <ExternalLink size={16} />
+                  </a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -1666,6 +1923,15 @@ function PartnerPage({ chainId, token }: { chainId: string; token: string }) {
     setSort(nextSortForField(sort, field));
   };
 
+  const exportWalletRows: WalletExportLoader = async ({ fromRank, toRank }) => {
+    const result = await fetchPartner(chainId, token, {
+      limit: toRank - fromRank + 1,
+      offset: fromRank - 1,
+      sort
+    });
+    return result.walletRows;
+  };
+
   return (
     <main className="app-shell">
       <header className="page-header compact">
@@ -1718,7 +1984,13 @@ function PartnerPage({ chainId, token }: { chainId: string; token: string }) {
             </div>
             <span>{detail ? formatNumber(detail.totalWalletRows) : "0"} wallets</span>
           </div>
-          <WhaleTable data={walletData} sort={sort} onSort={handleHeaderSort} />
+          <WhaleTable
+            data={walletData}
+            sort={sort}
+            onSort={handleHeaderSort}
+            exportName={`partner-${token}-wallets`}
+            onExportRows={exportWalletRows}
+          />
         </div>
       </section>
     </main>
@@ -1759,6 +2031,15 @@ function BondPage({ address }: { address: string }) {
     setSaleSort(nextSaleSortForField(saleSort, field));
   };
 
+  const exportWalletRows: WalletExportLoader = async ({ fromRank, toRank }) => {
+    const result = await fetchBond(address, {
+      limit: toRank - fromRank + 1,
+      offset: fromRank - 1,
+      sort
+    });
+    return result.walletRows;
+  };
+
   return (
     <main className="app-shell">
       <header className="page-header compact">
@@ -1797,7 +2078,13 @@ function BondPage({ address }: { address: string }) {
             </div>
             <span>{detail ? formatNumber(detail.totalWalletRows) : "0"} wallets</span>
           </div>
-          <WhaleTable data={walletData} sort={sort} onSort={handleHeaderSort} />
+          <WhaleTable
+            data={walletData}
+            sort={sort}
+            onSort={handleHeaderSort}
+            exportName={`bond-${address}-wallets`}
+            onExportRows={exportWalletRows}
+          />
         </div>
 
         <div className="table-panel">
@@ -1933,10 +2220,7 @@ function SalesTable({
           {rows.map((sale) => (
             <tr key={sale.key}>
               <td>
-                <button className="wallet-link" onClick={() => navigate(`/address/${encodeURIComponent(sale.wallet)}`)}>
-                  <WalletCards size={15} />
-                  <span>{shortenAddress(sale.wallet)}</span>
-                </button>
+                <WalletAddressLink wallet={sale.wallet} />
               </td>
               <td className="numeric strong">{formatUsd(sale.dollarValue)}</td>
               <td className="numeric">{formatNumber(Math.round(sale.payout))}</td>
@@ -1968,7 +2252,12 @@ function WalletPage({ address }: { address: string }) {
             <ChevronLeft size={16} />
             Back
           </button>
-          <h1>{shortenAddress(address)}</h1>
+          <h1>
+            <span className="title-wallet">
+              <span>{shortenAddress(address)}</span>
+              <CopyButton value={address} label={`Copy ${shortenAddress(address)}`} />
+            </span>
+          </h1>
         </div>
         <div className="header-actions">
           <PageTabs active="wallets" />

@@ -25,6 +25,13 @@ export interface WhaleParams {
   secondarySort?: SortKey;
 }
 
+export interface WalletRowsParams {
+  limit?: number;
+  offset?: number;
+  sort?: SortKey;
+  secondarySort?: SortKey;
+}
+
 function buildQuery(params: WhaleParams): string {
   const query = new URLSearchParams();
   query.set("scope", params.scope);
@@ -37,6 +44,15 @@ function buildQuery(params: WhaleParams): string {
   if (params.dateFrom) query.set("dateFrom", params.dateFrom);
   if (params.dateTo) query.set("dateTo", params.dateTo);
   if (params.hideLowValue) query.set("hideLowValue", "true");
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
+  if (params.sort) query.set("sort", params.sort);
+  if (params.secondarySort) query.set("secondarySort", params.secondarySort);
+  return query.toString();
+}
+
+function buildWalletRowsQuery(params: WalletRowsParams = {}): string {
+  const query = new URLSearchParams();
   if (params.limit) query.set("limit", String(params.limit));
   if (params.offset) query.set("offset", String(params.offset));
   if (params.sort) query.set("sort", params.sort);
@@ -73,10 +89,14 @@ export function fetchPartners(): Promise<PartnerListResponse> {
   return readJson<PartnerListResponse>("/api/partners");
 }
 
-export function fetchPartner(chainId: string, token: string): Promise<PartnerDetailResponse> {
-  return readJson<PartnerDetailResponse>(`/api/partner/${chainId}/${encodeURIComponent(token)}`);
+export function fetchPartner(chainId: string, token: string, params?: WalletRowsParams): Promise<PartnerDetailResponse> {
+  const query = buildWalletRowsQuery(params);
+  const suffix = query ? `?${query}` : "";
+  return readJson<PartnerDetailResponse>(`/api/partner/${chainId}/${encodeURIComponent(token)}${suffix}`);
 }
 
-export function fetchBond(address: string): Promise<BondDetailResponse> {
-  return readJson<BondDetailResponse>(`/api/bond/${address}`);
+export function fetchBond(address: string, params?: WalletRowsParams): Promise<BondDetailResponse> {
+  const query = buildWalletRowsQuery(params);
+  const suffix = query ? `?${query}` : "";
+  return readJson<BondDetailResponse>(`/api/bond/${address}${suffix}`);
 }
