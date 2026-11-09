@@ -13,6 +13,7 @@ export const CHAIN_LABELS: Record<number, string> = {
   137: "Polygon",
   8453: "Base",
   999: "HyperEVM",
+  4663: "Robinhood Chain",
   101: "Solana",
   7565164: "Solana"
 };

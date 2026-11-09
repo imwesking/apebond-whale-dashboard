@@ -10,6 +10,8 @@ import {
   normalizeSales
 } from "./aggregation.js";
 import { ApeBondApiError, type ApeBondDataClient } from "./apeBondClient.js";
+import { buildCommercialInsights, parseCommercialMonth } from "./commercialInsights.js";
+import type { CommercialInsightsReadyResponse } from "./commercialInsightsTypes.js";
 import {
   buildBondRow,
   buildBondRows,
@@ -243,6 +245,39 @@ export class DashboardService {
       progress: this.getProgress(),
       warnings: this.allTime.failures
     };
+  }
+
+  async getCommercialInsights(requestedMonth?: unknown): Promise<CommercialInsightsReadyResponse> {
+    const month = parseCommercialMonth(requestedMonth);
+    if (month && month >= new Date().toISOString().slice(0, 7)) {
+      throw new Error("Invalid month: select a completed UTC month");
+    }
+    const { sales, source } = await this.getSalesForScope("all", false);
+    let catalogueBonds: ApeBondSale[] = [];
+    let catalogueAsOf: string | null = null;
+    const warnings: string[] = [];
+    try {
+      const catalogue = await this.getCachedSalesInfo();
+      catalogueBonds = catalogue.data.bonds ?? [];
+      catalogueAsOf = catalogue.fetchedAt;
+    } catch {
+      if (this.salesInfoCache) {
+        catalogueBonds = this.salesInfoCache.data.bonds ?? [];
+        catalogueAsOf = this.salesInfoCache.fetchedAt;
+        warnings.push("The latest catalogue request failed. Showing previously fetched catalogue metadata.");
+      } else {
+        warnings.push("The current catalogue is unavailable. Product availability is unknown.");
+      }
+    }
+    if (this.allTime.progress.error) warnings.push("The latest historical refresh failed. Showing the previous sales snapshot.");
+    return buildCommercialInsights(sales, {
+      month,
+      salesAsOf: source?.lastRefreshed ?? "",
+      catalogueAsOf,
+      catalogueBonds,
+      failedContracts: this.allTime.failures.length,
+      warnings
+    });
   }
 
   async getMonthlyAcquisitionDetail(month: string): Promise<AcquisitionMonthDetailReadyResponse> {

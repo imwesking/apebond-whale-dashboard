@@ -27,7 +27,7 @@
 
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   min-height: 100vh;
   background:
     linear-gradient(180deg, rgba(15, 123, 97, 0.06), transparent 270px),
@@ -45,7 +45,7 @@ a {
 }
 
 .app-shell {
-  width: min(1600px, calc(100vw - 32px));
+  width: min(1600px, calc(100% - 32px));
   margin: 0 auto;
   padding: 22px 0 36px;
 }
@@ -986,7 +986,7 @@ tbody tr:hover {
 
 @media (max-width: 780px) {
   .app-shell {
-    width: min(100vw - 20px, 760px);
+    width: min(100% - 20px, 760px);
     padding-top: 14px;
   }
 
@@ -1002,6 +1002,17 @@ tbody tr:hover {
 
   .page-tabs button {
     flex: 1;
+  }
+
+  .page-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .page-tabs button {
+    min-width: 0;
+    min-height: 40px;
   }
 
   .kpi-strip {

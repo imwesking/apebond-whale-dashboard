@@ -83,6 +83,22 @@ export function createServer(service = new DashboardService(new ApeBondClient())
     }
   });
 
+  app.get("/api/commercial-insights", async (request, response, next) => {
+    try {
+      response.json(await service.getCommercialInsights(request.query.month));
+    } catch (error) {
+      if (error instanceof BuildingError) {
+        if (error.progress.status === "error") {
+          response.status(503).json({ error: error.progress.error ?? "The historical sales index is unavailable" });
+        } else {
+          response.status(202).json({ status: "building", progress: error.progress });
+        }
+        return;
+      }
+      next(error);
+    }
+  });
+
   app.get("/api/acquisition/monthly/:month", async (request, response, next) => {
     try {
       response.json(await service.getMonthlyAcquisitionDetail(request.params.month));

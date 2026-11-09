@@ -41,6 +41,7 @@ import {
   fetchWhales
 } from "./api";
 import { formatDate, formatNumber, formatUsd, percent, shortenAddress } from "./format";
+import CommercialInsightsPage from "./CommercialInsightsPage";
 import type {
   AcquisitionMonthDetailReadyResponse,
   AcquisitionMonthRow,
@@ -389,7 +390,7 @@ function CsvRangeExport({
   );
 }
 
-function PageTabs({ active }: { active: "wallets" | "partners" | "acquisition" }) {
+function PageTabs({ active }: { active: "wallets" | "partners" | "acquisition" | "commercial-insights" }) {
   return (
     <nav className="page-tabs" aria-label="Dashboard pages">
       <button className={active === "wallets" ? "active" : ""} onClick={() => navigate("/")}>
@@ -399,6 +400,10 @@ function PageTabs({ active }: { active: "wallets" | "partners" | "acquisition" }
       <button className={active === "acquisition" ? "active" : ""} onClick={() => navigate("/acquisition")}>
         <TrendingUp size={16} />
         <span>Acquisition</span>
+      </button>
+      <button className={active === "commercial-insights" ? "active" : ""} onClick={() => navigate("/commercial-insights")}>
+        <BadgeDollarSign size={16} />
+        <span>Commercial Insights</span>
       </button>
       <button className={active === "partners" ? "active" : ""} onClick={() => navigate("/partners")}>
         <Layers3 size={16} />
@@ -2350,6 +2355,15 @@ function WalletPage({ address }: { address: string }) {
 
 export default function App() {
   const path = usePathname();
+  if (path === "/commercial-insights") {
+    return (
+      <CommercialInsightsPage
+        navigation={<PageTabs active="commercial-insights" />}
+        onNavigate={navigate}
+        renderWallet={(wallet) => <WalletAddressLink wallet={wallet} />}
+      />
+    );
+  }
   if (path === "/acquisition") return <AcquisitionPage />;
   if (path === "/partners") return <PartnersPage />;
   const partnerMatch = path.match(/^\/partner\/([^/]+)\/([^/]+)$/);

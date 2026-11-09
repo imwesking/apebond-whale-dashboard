@@ -12,6 +12,14 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Local API: `http://localhost:8787`
 
+## Commercial Insights
+
+Open `/commercial-insights` for closed-month sales comparisons, product performance, buyer segments, concentration, and current or inactive repeat buyers. The page defaults to the latest completed UTC month covered by the historical index and compares it with the previous month and the same month last year.
+
+`GET /api/commercial-insights?month=YYYY-MM` calculates the section from the existing all-time index and cached catalogue. Opening or refreshing it does not start additional wallet or bond scans. New buyers follow Acquisition's first-observed-purchase-month definition. Inactive repeat buyers purchased in at least two distinct months in the preceding twelve calendar months and made no purchase in the selected month; their previous volume is not a forecast.
+
+Catalogue flags describe the current catalogue, not historical availability. "Not marked sold out" does not establish that an offer can currently be purchased. The page shows separate sales and catalogue timestamps and warns when coverage is incomplete or stale.
+
 ## Production
 
 ```bash
